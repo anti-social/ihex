@@ -9,6 +9,7 @@
 
 use std::error::Error;
 use std::fmt;
+use std::io::{BufRead, Lines};
 use std::iter::FusedIterator;
 use std::str;
 
@@ -35,6 +36,8 @@ pub enum ReaderError {
     UnsupportedRecordType(u8),
     /// The payload length does not match the record type.
     InvalidLengthForType,
+    /// Reading error
+    Read,
 }
 
 impl Error for ReaderError {}
@@ -64,6 +67,9 @@ impl fmt::Display for ReaderError {
             }
             ReaderError::InvalidLengthForType => {
                 write!(f, "payload length invalid for record type")
+            }
+            ReaderError::Read => {
+                write!(f, "error reading record")
             }
         }
     }
@@ -107,7 +113,7 @@ impl Record {
             return Err(ReaderError::MissingStartCode);
         }
 
-        let data_portion = &string[1..];
+        let data_portion = &string[1..].trim_end_matches('\r');
         let data_portion_length = data_portion.chars().count();
 
         // Validate all characters are hexadecimal before checking the digit counts for more accurate errors.
@@ -270,35 +276,35 @@ impl Default for ReaderOptions {
     }
 }
 
-pub struct Reader<'a> {
+pub struct Reader<R: BufRead> {
     /// Iterator over distinct lines of the input regardless of line ending.
-    line_iterator: str::Lines<'a>,
+    line_iterator: Lines<R>,
     /// Reading may complete before the line iterator.
     finished: bool,
     /// Configuration options.
     options: ReaderOptions,
 }
 
-impl<'a> Reader<'a> {
+impl<R: BufRead> Reader<R> {
     ///
-    /// Creates a new IHEX reader over `string` with the specified configuration parameters. If
+    /// Creates a new IHEX reader over `BufRead` with the specified configuration parameters. If
     /// `stop_after_first_error` is `true` then the first error will make all subsequent calls
     /// to `next()` return `None`. If `stop_after_eof` is `true` then the first EoF record
     /// will make all subsequent calls to `next()` return `None`.
     ///
-    pub fn new_with_options(string: &'a str, options: ReaderOptions) -> Self {
-        Reader {
-            line_iterator: string.lines(),
+    pub fn new_with_options(reader: R, options: ReaderOptions) -> Self {
+        Self {
+            line_iterator: reader.lines(),
             finished: false,
             options,
         }
     }
 
     ///
-    /// Creates a new IHEX reader over `string` with default configuration parameters.
+    /// Creates a new IHEX reader over `BufRead` with default configuration parameters.
     ///
-    pub fn new(string: &'a str) -> Self {
-        Reader::new_with_options(string, Default::default())
+    pub fn new(reader: R) -> Self {
+        Self::new_with_options(reader, Default::default())
     }
 
     ///
@@ -306,22 +312,25 @@ impl<'a> Reader<'a> {
     /// Increments the offset by the number of bytes processed. Does not respect the 'finished' flag.
     /// It will return either the next record string to be read, or None if nothing is left to process.
     ///
-    fn next_record(&mut self) -> Option<&'a str> {
-        let mut result = None;
-
+    fn next_record(&mut self) -> Result<Option<String>, ReaderError> {
         // Locate the first non-empty line.
         while let Some(line) = self.line_iterator.next() {
-            if !line.is_empty() {
-                result = Some(line);
-                break;
+            match line {
+                Ok(line) => {
+                    if line.is_empty() {
+                        continue;
+                    }
+                    return Ok(Some(line));
+                }
+                Err(_) => return Err(ReaderError::Read),
             }
         }
 
-        result
+        Ok(None)
     }
 }
 
-impl<'a> Iterator for Reader<'a> {
+impl<R: BufRead> Iterator for Reader<R> {
     type Item = Result<Record, ReaderError>;
 
     ///
@@ -334,13 +343,13 @@ impl<'a> Iterator for Reader<'a> {
         }
 
         match self.next_record() {
-            None => {
+            Ok(None) => {
                 self.finished = true;
                 None
             }
 
-            Some(line) => {
-                let parse_result = str::parse::<Record>(line);
+            Ok(Some(line)) => {
+                let parse_result = str::parse::<Record>(&line);
 
                 // Check if iteration should end after a parse failure.
                 if parse_result.is_err() && self.options.stop_after_first_error {
@@ -356,8 +365,9 @@ impl<'a> Iterator for Reader<'a> {
 
                 Some(parse_result)
             }
+            Err(e) => return Some(Err(e)),
         }
     }
 }
 
-impl<'a> FusedIterator for Reader<'a> {}
+impl<R: BufRead> FusedIterator for Reader<R> {}

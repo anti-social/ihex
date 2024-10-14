@@ -1,19 +1,28 @@
-use std::io::Read;
+use std::io::{BufRead, Read};
 
 use crate::{Reader, Record};
 
-/// BinaryReader allows transparently interpreting data in a hex format as binary data
-pub struct BinaryReader<'a> {
-    reader: Reader<'a>,
+#[derive(Clone, Copy, Debug)]
+pub enum StartAddress {
+    Segment {
+        cs: u16,
+        ip: u16,
+    },
+    Linear(u32),
+}
+
+pub struct BinaryReader<R: BufRead> {
+    reader: Reader<R>,
     record: Option<Record>,
     record_pos: usize,
     base_address: u32,
     address: u32,
     read_bytes: u32,
+    start_address: Option<StartAddress>,
 }
 
-impl<'a> BinaryReader<'a> {
-    pub fn new(reader: Reader<'a>) -> Self {
+impl<R: BufRead> BinaryReader<R> {
+    pub fn new(reader: Reader<R>) -> Self {
         Self {
             reader,
             record: None,
@@ -21,7 +30,12 @@ impl<'a> BinaryReader<'a> {
             base_address: 0,
             address: 0,
             read_bytes: 0,
+            start_address: None,
         }
+    }
+
+    pub fn start_address(&self) -> Option<StartAddress> {
+        return self.start_address;
     }
 
     fn update_address(&mut self, addr: u32) {
@@ -33,7 +47,7 @@ impl<'a> BinaryReader<'a> {
     }
 }
 
-impl<'a> Read for BinaryReader<'a> {
+impl<R: BufRead> Read for BinaryReader<R> {
     fn read(&mut self, mut buf: &mut [u8]) -> Result<usize, std::io::Error> {
         let buf_len = buf.len();
         loop {
@@ -82,8 +96,14 @@ impl<'a> Read for BinaryReader<'a> {
                         self.record = None;
                         self.record_pos = 0;
                     }
-                    Record::StartSegmentAddress { .. } |
-                    Record::StartLinearAddress(..) => {
+                    Record::StartSegmentAddress { cs, ip } => {
+                        self.start_address = Some(
+                            StartAddress::Segment { cs: *cs, ip: *ip }
+                        );
+                        self.record = None;
+                    }
+                    Record::StartLinearAddress(addr) => {
+                        self.start_address = Some(StartAddress::Linear(*addr));
                         self.record = None;
                     }
                     Record::EndOfFile => {
@@ -114,7 +134,7 @@ impl<'a> Read for BinaryReader<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Read;
+    use std::io::{Cursor, Read};
 
     use assert_matches::assert_matches;
     use indoc::indoc;
@@ -129,7 +149,7 @@ mod tests {
             :10000000F0FF001029BA05086D440508DDE6010877
         "};
 
-        let reader = Reader::new(input);
+        let reader = Reader::new(Cursor::new(input));
         let mut binary_reader = BinaryReader::new(reader);
         let mut buf = [0; 12];
 
@@ -165,7 +185,7 @@ mod tests {
             :02000000F0FF0F
         "};
 
-        let reader = Reader::new(input);
+        let reader = Reader::new(Cursor::new(input));
         let mut binary_reader = BinaryReader::new(reader);
         let mut buf = [0; 12];
 

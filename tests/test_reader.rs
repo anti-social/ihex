@@ -7,6 +7,10 @@
 // distributed except according to those terms.
 //
 
+use std::io::Cursor;
+
+use indoc::indoc;
+
 use ihex::*;
 
 #[test]
@@ -300,13 +304,14 @@ fn test_record_from_record_string_parses_valid_start_linear_address() {
 
 #[test]
 fn test_reader_processes_well_formed_ihex_object() {
-    let input = String::new()
-        + &":0B0010006164647265737320676170A7\n"
-        + &":020000021200EA\n"
-        + &":0400000300003800C1\n"
-        + &":02000004FFFFFC\n"
-        + &":04000005000000CD2A\n"
-        + &":00000001FF";
+    let input = indoc!{"
+        :0B0010006164647265737320676170A7
+        :020000021200EA
+        :0400000300003800C1
+        :02000004FFFFFC
+        :04000005000000CD2A
+        :00000001FF
+    "};
 
     let data_rec = Record::Data {
         offset: 0x0010,
@@ -323,7 +328,7 @@ fn test_reader_processes_well_formed_ihex_object() {
     let sla_rec = Record::StartLinearAddress(0x000000CD);
     let eof_rec = Record::EndOfFile;
 
-    let mut reader = Reader::new(&input);
+    let mut reader = Reader::new(Cursor::new(input));
     assert_eq!(reader.next(), Some(Ok(data_rec)));
     assert_eq!(reader.next(), Some(Ok(esa_rec)));
     assert_eq!(reader.next(), Some(Ok(ssa_rec)));
@@ -335,8 +340,11 @@ fn test_reader_processes_well_formed_ihex_object() {
 
 #[test]
 fn test_reader_respects_stop_after_first_error_false() {
-    let input =
-        String::new() + &":0B0010006164647265737320676170A7\n" + &":\n" + &":0400000300003800C1\n";
+    let input = indoc!{"
+        :0B0010006164647265737320676170A7
+        :
+        :0400000300003800C1
+    "};
 
     let data_rec = Record::Data {
         offset: 0x0010,
@@ -350,7 +358,7 @@ fn test_reader_respects_stop_after_first_error_false() {
     };
 
     let mut reader = Reader::new_with_options(
-        &input,
+        Cursor::new(input),
         ReaderOptions {
             stop_after_first_error: false,
             stop_after_eof: false,
@@ -364,8 +372,11 @@ fn test_reader_respects_stop_after_first_error_false() {
 
 #[test]
 fn test_reader_respects_stop_after_first_error_true() {
-    let input =
-        String::new() + &":0B0010006164647265737320676170A7\n" + &":\n" + &":0400000300003800C1\n";
+    let input = indoc!{"
+        :0B0010006164647265737320676170A7
+        :
+        :0400000300003800C1
+    "};
 
     let data_rec = Record::Data {
         offset: 0x0010,
@@ -375,7 +386,7 @@ fn test_reader_respects_stop_after_first_error_true() {
     };
 
     let mut reader = Reader::new_with_options(
-        &input,
+        Cursor::new(input),
         ReaderOptions {
             stop_after_first_error: true,
             stop_after_eof: false,
@@ -388,10 +399,11 @@ fn test_reader_respects_stop_after_first_error_true() {
 
 #[test]
 fn test_reader_respects_stop_after_first_eof_false() {
-    let input = String::new()
-        + &":0B0010006164647265737320676170A7\n"
-        + &":00000001FF\n"
-        + &":0400000300003800C1\n";
+    let input = indoc!{"
+        :0B0010006164647265737320676170A7
+        :00000001FF
+        :0400000300003800C1
+    "};
 
     let data_rec = Record::Data {
         offset: 0x0010,
@@ -406,7 +418,7 @@ fn test_reader_respects_stop_after_first_eof_false() {
     let eof_rec = Record::EndOfFile;
 
     let mut reader = Reader::new_with_options(
-        &input,
+        Cursor::new(input),
         ReaderOptions {
             stop_after_first_error: false,
             stop_after_eof: false,
@@ -420,10 +432,11 @@ fn test_reader_respects_stop_after_first_eof_false() {
 
 #[test]
 fn test_reader_respects_stop_after_first_eof_true() {
-    let input = String::new()
-        + &":0B0010006164647265737320676170A7\n"
-        + &":00000001FF\n"
-        + &":0400000300003800C1\n";
+    let input = indoc!{"
+        :0B0010006164647265737320676170A7
+        :00000001FF
+        :0400000300003800C1
+    "};
 
     let data_rec = Record::Data {
         offset: 0x0010,
@@ -434,7 +447,7 @@ fn test_reader_respects_stop_after_first_eof_true() {
     let eof_rec = Record::EndOfFile;
 
     let mut reader = Reader::new_with_options(
-        &input,
+        Cursor::new(input),
         ReaderOptions {
             stop_after_first_error: false,
             stop_after_eof: true,
@@ -447,10 +460,10 @@ fn test_reader_respects_stop_after_first_eof_true() {
 
 #[test]
 fn test_reader_allow_no_trailing_newlines() {
-    let input = String::new()
-        + &":0B0010006164647265737320676170A7\n"
-        + &":00000001FF\n"
-        + &":0400000300003800C1";
+    let input = indoc!{"
+        :0B0010006164647265737320676170A7
+        :00000001FF
+        :0400000300003800C1"};
 
     let data_rec = Record::Data {
         offset: 0x0010,
@@ -460,7 +473,7 @@ fn test_reader_allow_no_trailing_newlines() {
     };
     let eof_rec = Record::EndOfFile;
 
-    let mut reader = Reader::new(&input);
+    let mut reader = Reader::new(Cursor::new(input));
     assert_eq!(reader.next(), Some(Ok(data_rec)));
     assert_eq!(reader.next(), Some(Ok(eof_rec)));
     assert_eq!(reader.next(), None);
@@ -469,9 +482,9 @@ fn test_reader_allow_no_trailing_newlines() {
 #[test]
 fn test_reader_respects_all_newline_formats() {
     let input = String::new() +
-    &":0B0010006164647265737320676170A7\n"   + // Unix LF
-    &":0B0010006164647265737320676170A7\r\n" + // Windows CRLF
-    &":00000001FF\r"; // MacOS CR
+        ":0B0010006164647265737320676170A7\n"   + // Unix LF
+        ":0B0010006164647265737320676170A7\r\n" + // Windows CRLF
+        ":00000001FF\r"; // MacOS CR
 
     let data_rec_1 = Record::Data {
         offset: 0x0010,
@@ -487,7 +500,7 @@ fn test_reader_respects_all_newline_formats() {
     };
     let eof_rec = Record::EndOfFile;
 
-    let mut reader = Reader::new(&input);
+    let mut reader = Reader::new(Cursor::new(input));
     assert_eq!(reader.next(), Some(Ok(data_rec_1)));
     assert_eq!(reader.next(), Some(Ok(data_rec_2)));
     assert_eq!(reader.next(), Some(Ok(eof_rec)));
@@ -496,7 +509,7 @@ fn test_reader_respects_all_newline_formats() {
 
 #[test]
 fn test_reader_allow_no_trailing_newlines_on_one_record() {
-    let input = String::from(":0B0010006164647265737320676170A7");
+    let input = ":0B0010006164647265737320676170A7";
 
     let data_rec = Record::Data {
         offset: 0x0010,
@@ -505,17 +518,21 @@ fn test_reader_allow_no_trailing_newlines_on_one_record() {
         ],
     };
 
-    let mut reader = Reader::new(&input);
+    let mut reader = Reader::new(Cursor::new(input));
     assert_eq!(reader.next(), Some(Ok(data_rec)));
     assert_eq!(reader.next(), None);
 }
 
 #[test]
 fn test_reader_respects_ignores_extra_newlines() {
-    let input = String::new()
-        + &":0B0010006164647265737320676170A7\n"
-        + &":00000001FF\n\n\n"
-        + &":0400000300003800C1\n\n";
+    let input = indoc!{"
+        :0B0010006164647265737320676170A7
+        :00000001FF
+
+
+        :0400000300003800C1
+
+    "};
 
     let data_rec = Record::Data {
         offset: 0x0010,
@@ -526,7 +543,7 @@ fn test_reader_respects_ignores_extra_newlines() {
     let eof_rec = Record::EndOfFile;
 
     let mut reader = Reader::new_with_options(
-        &input,
+        Cursor::new(input),
         ReaderOptions {
             stop_after_first_error: false,
             stop_after_eof: true,

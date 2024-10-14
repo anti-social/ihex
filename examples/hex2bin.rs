@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{BufReader, Read, Write};
 
 use anyhow::Context;
 use ihex::{BinaryReader, Reader};
@@ -10,14 +10,11 @@ fn main() -> anyhow::Result<()> {
     let ref input_path = args.next().context("Missing input file")?;
     let ref output_path = args.next().context("Missing output file")?;
 
-    let mut input_file = File::open(input_path)
+    let input_file = File::open(input_path)
         .with_context(|| format!("Failed to read file: {input_path}"))?;
     let mut output_file = File::create(output_path)
         .with_context(|| format!("Failed to creat file: {output_path}"))?;
-    let mut input = String::new();
-    input_file.read_to_string(&mut input)
-        .with_context(|| format!("Failed to read from {input_path}"))?;
-    let reader = Reader::new(&input);
+    let reader = Reader::new(BufReader::new(input_file));
     let mut binary_reader = BinaryReader::new(reader);
     let mut buf = [0; 64];
     loop {
