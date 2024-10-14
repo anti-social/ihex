@@ -13,11 +13,13 @@
 //! This format is commonly used for representing compiled program code and
 //! data to be loaded into a microcontroller, flash memory or ROM.
 
+mod binary_reader;
 mod checksum;
 mod reader;
 mod record;
 mod writer;
 
+pub use binary_reader::*;
 pub use checksum::*;
 pub use reader::*;
 pub use record::*;
